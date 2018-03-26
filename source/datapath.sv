@@ -16,6 +16,7 @@
 `include "exe_reg_if.vh"
 `include "mem_reg_if.vh"
 `include "hazard_unit_if.vh"
+`include "forward_unit_if.vh"
 
 // alu op, mips op, and instruction type
 `include "cpu_types_pkg.vh"
@@ -39,7 +40,9 @@ module datapath (
 
   // latch enables init
   logic fetch_EN, decode_EN, exe_EN, mem_EN;
+  logic fetch_FLUSH, decode_FLUSH, exe_FLUSH;
 
+  logic PCSrc, next_PCSrc;
   // interfaces
   register_file_if rfif();
   alu_if           aluif();
@@ -49,6 +52,8 @@ module datapath (
   exe_reg_if       erif();
   mem_reg_if       mrif();
   hazard_unit_if   hzif();
+  forward_unit_if fuif();
+
 
   // DUT
   register_file REG (CLK, nRST, rfif.rf);
@@ -56,20 +61,30 @@ module datapath (
   control_unit  CTR (ctrluif.ctrlu);
   extender      EXT (.imm16 (frif.decode_imemload[15:0]), .ExtOp (ctrluif.ExtOp), .out (ext_out));
   hazard_unit   HZD (hzif.hazard);
-   
+  forward_unit FWD (fuif.fu);
+
 
   // ########## PIPELINE LATCHES ########## //
 
   // ---------- Fetch register & fetch stage ---------- //
   assign fetch_EN = hzif.fetch_EN;
+  assign fetch_FLUSH = hzif.fetch_NOP;
+
   always_ff @(posedge CLK, negedge nRST) begin
     // reset or nop injection
-    if(nRST == 1'b0 | hzif.fetch_NOP == 1'b1) begin
+    //if(nRST == 1'b0 | hzif.fetch_NOP == 1'b1) begin
+    if(nRST == 1'b0) begin
       // data signals
       frif.decode_pc_4 <= '0;
       frif.decode_imemload <= '0;
     end
-
+    // flush
+    else if(fetch_FLUSH == 1'b1 || PCSrc == 1'b0) begin
+      //frif.fetch_pc_4 <= '0;
+      //frif.fetch_imemload <= '0;
+      frif.decode_pc_4 <= '0;
+      frif.decode_imemload <= '0;
+    end
     // enabled
     else if(fetch_EN == 1'b1) begin
       // data signals
@@ -92,10 +107,13 @@ module datapath (
 
   // ---------- Decode register and decode stage ---------- //
   assign decode_EN = hzif.decode_EN;
+  assign decode_FLUSH = hzif.decode_NOP;
+
   always_ff @(posedge CLK, negedge nRST) begin
     //reset or nop injections
-    if(nRST == 1'b0 | hzif.decode_NOP == 1'b1) begin
+    if(nRST == 1'b0) begin
       // control signals
+       drif.op_out        <= RTYPE;
       drif.exe_halt      <= '0;
       drif.exe_RegWr     <= '0;
       drif.exe_MemtoReg  <= '0;
@@ -116,6 +134,36 @@ module datapath (
       drif.exe_rdat2     <= '0;
       drif.exe_shamt     <= '0;
       drif.exe_ex_out    <= '0;
+      drif.exe_rs        <= '0;
+      drif.exe_rd        <= '0;
+      drif.exe_rt        <= '0;
+    end
+
+    // flush
+    else if(decode_FLUSH == 1'b1) begin
+      // control signals
+      drif.op_out        <= RTYPE;
+      drif.exe_halt      <= '0;
+      drif.exe_RegWr     <= '0;
+      drif.exe_MemtoReg  <= '0;
+      drif.exe_MemWr     <= '0;
+      drif.exe_MemRd     <= '0;
+      drif.exe_branch    <= '0;
+      drif.exe_PCSrc     <= '0;
+      drif.exe_jal       <= '0;
+      drif.exe_RegDst    <= '0;
+      drif.exe_ALUOp     <= ALU_SLL;
+      drif.exe_shift     <= '0;
+      drif.exe_ALUSrc    <= '0;
+
+      // data signals
+      drif.exe_pc_4      <= '0;
+      drif.exe_jump_addr <= '0;
+      drif.exe_rdat1     <= '0;
+      drif.exe_rdat2     <= '0;
+      drif.exe_shamt     <= '0;
+      drif.exe_ex_out    <= '0;
+      drif.exe_rs        <= '0;
       drif.exe_rd        <= '0;
       drif.exe_rt        <= '0;
     end
@@ -123,6 +171,7 @@ module datapath (
     // enabled
     else if(decode_EN == 1'b1) begin
       // control signals
+       drif.op_out        <= drif.op_in;
       drif.exe_halt      <= drif.decode_halt;
       drif.exe_RegWr     <= drif.decode_RegWr;
       drif.exe_MemtoReg  <= drif.decode_MemtoReg;
@@ -143,6 +192,7 @@ module datapath (
       drif.exe_rdat2     <= drif.decode_rdat2;
       drif.exe_shamt     <= drif.decode_shamt;
       drif.exe_ex_out    <= drif.decode_ex_out;
+      drif.exe_rs        <= drif.decode_rs;
       drif.exe_rd        <= drif.decode_rd;
       drif.exe_rt        <= drif.decode_rt;
     end
@@ -150,6 +200,7 @@ module datapath (
     // disabled, recycle latch outputs to inputs
     else begin
       // control signals
+      drif.op_out        <= drif.op_out;
       drif.exe_halt      <= drif.exe_halt;
       drif.exe_RegWr     <= drif.exe_RegWr;
       drif.exe_MemtoReg  <= drif.exe_MemtoReg;
@@ -170,12 +221,14 @@ module datapath (
       drif.exe_rdat2     <= drif.exe_rdat2;
       drif.exe_shamt     <= drif.exe_shamt;
       drif.exe_ex_out    <= drif.exe_ex_out;
+      drif.exe_rs        <= drif.exe_rs;
       drif.exe_rd        <= drif.exe_rd;
       drif.exe_rt        <= drif.exe_rt;
     end
   end // always_ff
 
   // control signal connections
+  assign drif.op_in[5:0]      = frif.decode_imemload[31:26];
   assign drif.decode_halt      = ctrluif.halt;
   assign drif.decode_RegWr     = ctrluif.RegWr;
   assign drif.decode_MemtoReg  = ctrluif.MemtoReg;
@@ -196,15 +249,43 @@ module datapath (
   assign drif.decode_rdat2     = rfif.rdat2;
   assign drif.decode_shamt     = frif.decode_imemload[10:6];
   assign drif.decode_ex_out    = ext_out;
+  assign drif.decode_rs        = frif.decode_imemload[25:21];
   assign drif.decode_rd        = frif.decode_imemload[15:11];
   assign drif.decode_rt        = frif.decode_imemload[20:16];
 
   // ---------- Execute register and execute stage ---------- //
   assign exe_EN = hzif.exe_EN;
+  assign exe_FLUSH = hzif.exe_NOP;
+
   always_ff @(posedge CLK, negedge nRST) begin
     // reset
-    if(nRST == 1'b0 | hzif.exe_NOP == 1'b1) begin
+    if(nRST == 1'b0) begin
       // control signals
+       erif.op_out         <= RTYPE;
+      erif.mem_halt        <= '0;
+      erif.mem_RegWr       <= '0;
+      erif.mem_MemtoReg    <= '0;
+      erif.mem_MemWr       <= '0;
+      erif.mem_MemRd       <= '0;
+      erif.mem_branch      <= '0;
+      erif.mem_PCSrc       <= '0;
+
+      // data signals
+      erif.mem_pc_4        <= '0;
+      erif.mem_jump_addr   <= '0;
+      erif.mem_branch_addr <= '0;
+      erif.mem_rdat1       <= '0;
+      erif.mem_ex_out      <= '0;
+      erif.mem_zero        <= '0;
+      erif.mem_alu_out     <= '0;
+      erif.mem_rdat2       <= '0;
+      erif.mem_wsel        <= '0;
+    end
+
+    // flush
+    else if(exe_FLUSH == 1'b1) begin
+      // control signals
+       erif.op_out         <= RTYPE;
       erif.mem_halt        <= '0;
       erif.mem_RegWr       <= '0;
       erif.mem_MemtoReg    <= '0;
@@ -228,6 +309,7 @@ module datapath (
     // enabled
     else if(exe_EN == 1'b1) begin
       // control signals
+       erif.op_out         <= erif.op_in;
       erif.mem_halt        <= erif.exe_halt;
       erif.mem_RegWr       <= erif.exe_RegWr;
       erif.mem_MemtoReg    <= erif.exe_MemtoReg;
@@ -251,6 +333,7 @@ module datapath (
     // disabled, recycle latch outputs to inputs
     else begin
       // control signals
+       erif.op_out         <= erif.op_out;
       erif.mem_halt        <= erif.mem_halt;
       erif.mem_RegWr       <= erif.mem_RegWr;
       erif.mem_MemtoReg    <= erif.mem_MemtoReg;
@@ -273,6 +356,7 @@ module datapath (
   end // always_ff
 
   // control signal connections
+   assign erif.op_in = drif.op_out;
   assign erif.exe_halt        = drif.exe_halt;
   assign erif.exe_RegWr       = drif.exe_RegWr;
   assign erif.exe_MemtoReg    = drif.exe_MemtoReg;
@@ -285,11 +369,20 @@ module datapath (
   assign erif.exe_pc_4        = drif.exe_pc_4;
   assign erif.exe_jump_addr   = drif.exe_jump_addr << 2;
   assign erif.exe_branch_addr = (drif.exe_ex_out << 2) + drif.exe_pc_4;
-  assign erif.exe_rdat1       = drif.exe_rdat1;
+  //assign erif.exe_rdat1       = drif.exe_rdat1;
+  assign erif.exe_rdat1       = fuif.rdat1_out;
   assign erif.exe_ex_out      = drif.exe_ex_out;
-  assign erif.exe_zero        = drif.exe_jal ? 0 : aluif.zero;
+  always_comb begin
+    if (drif.exe_jal | drif.op_out == J) begin
+      erif.exe_zero = 1'b0;
+    end
+    else begin
+      erif.exe_zero = aluif.zero;
+    end
+  end // always_comb
+  //assign erif.exe_zero        = drif.exe_jal ?  0 : aluif.zero;
   assign erif.exe_alu_out     = aluif.out;
-  assign erif.exe_rdat2       = drif.exe_rdat2;
+  assign erif.exe_rdat2       = fuif.rdat2_out;
   assign erif.exe_wsel        = drif.exe_RegDst ? drif.exe_rd : (drif.exe_jal ? 32'd31 : drif.exe_rt );
 
   // ---------- Memory register and memory stage ---------- //
@@ -298,6 +391,7 @@ module datapath (
     // reset
     if(nRST == 1'b0) begin
       // control signals
+       mrif.op_out <= RTYPE;
       mrif.wrb_halt     <= '0;
       mrif.wrb_RegWr    <= '0;
       mrif.wrb_MemtoReg <= '0;
@@ -313,6 +407,7 @@ module datapath (
     // enabled
     else if (mem_EN == 1'b1) begin
       // control signals
+       mrif.op_out <= mrif.op_in;
       mrif.wrb_halt     <= mrif.mem_halt;
       mrif.wrb_RegWr    <= mrif.mem_RegWr;
       mrif.wrb_MemtoReg <= mrif.mem_MemtoReg;
@@ -328,6 +423,7 @@ module datapath (
     // disable, recycle latch outputs to inputs
     else begin
       // control signals
+       mrif.op_out <= mrif.op_out;
       mrif.wrb_halt     <= mrif.wrb_halt;
       mrif.wrb_RegWr    <= mrif.wrb_RegWr;
       mrif.wrb_MemtoReg <= mrif.wrb_MemtoReg;
@@ -342,6 +438,7 @@ module datapath (
   end // alays_ff
 
   // control signal connections
+   assign mrif.op_in = erif.op_out;
   assign mrif.mem_halt     = erif.mem_halt;
   assign mrif.mem_RegWr    = erif.mem_RegWr;
   assign mrif.mem_MemtoReg = erif.mem_MemtoReg;
@@ -352,6 +449,9 @@ module datapath (
   assign mrif.mem_ex_out   = erif.mem_ex_out;
   assign mrif.mem_alu_out  = erif.mem_alu_out;
   assign mrif.mem_wsel     = erif.mem_wsel;
+
+
+  // ---------- Buffer Latch for forwarding ------------- //
 
 
   // ########## PC increment logic and register ########## //
@@ -381,25 +481,39 @@ module datapath (
   assign pc_jump     = {pc_4[31:28], erif.mem_jump_addr};
 
 
+
+  always_ff @ (posedge CLK, negedge nRST) begin
+
+    if (nRST == 1'b0) begin
+      PCSrc <= 1'b0;
+    end
+    else begin
+      PCSrc <= next_PCSrc;
+    end
+  end
   // ---------- PC increment logic ---------- //
   always_comb begin
     npc = 0;
     hzif.PCSrc = 2'b00;
-
+    next_PCSrc  = PCSrc;
     // zero flag is not set, set next pc according to PCSrc
     if(erif.mem_zero == 2'b00) begin
       if          (erif.mem_PCSrc == 2'b00) begin
         npc = pc_4;
         hzif.PCSrc = 2'b00;
+        next_PCSrc = 1'b1;
       end else if (erif.mem_PCSrc == 2'b01) begin
         npc = pc_register;
         hzif.PCSrc = 2'b01;
+        next_PCSrc = 1'b0;
       end else if (erif.mem_PCSrc == 2'b10) begin
         npc = pc_branch;
         hzif.PCSrc = 2'b10;
+        next_PCSrc = 1'b0;
       end else if (erif.mem_PCSrc == 2'b11) begin
         npc = pc_jump;
         hzif.PCSrc = 2'b11;
+        next_PCSrc = 1'b0;
       end
     end
     // zero flag is set, choose between pc + 4 or branch
@@ -407,10 +521,12 @@ module datapath (
       if(erif.mem_branch == 1'b0) begin
          npc = pc_4;
           hzif.PCSrc = 2'b00;
+         next_PCSrc = 1'b1;
       end
       else begin
         npc = pc_branch;
         hzif.PCSrc = 2'b10;
+        next_PCSrc = 1'b0;
       end
     end
   end // always_comb
@@ -430,22 +546,29 @@ module datapath (
   // choose between alu output, extended immediate value, data from memory, or pc + 4  to write to register
   always_comb begin
     casez(mrif.wrb_MemtoReg)
-          2'b00 : begin
+      2'b00 : begin
         rfif.wdat = mrif.wrb_alu_out;
-      end 2'b01 : begin
+        fuif.wb_dat = mrif.wrb_alu_out;
+      end
+      2'b01 : begin
         rfif.wdat = mrif.wrb_ex_out;
-      end 2'b10 : begin
+        fuif.wb_dat = mrif.wrb_ex_out;
+      end
+      2'b10 : begin
         rfif.wdat = mrif.wrb_dmemload;
-      end 2'b11 : begin
+        fuif.wb_dat = mrif.wrb_dmemload;
+      end
+      2'b11 : begin
         rfif.wdat = mrif.wrb_pc_4;
+        fuif.wb_dat = mrif.wrb_pc_4;
       end
     endcase
   end // always_comb
 
   // ---------- connect alu ---------- //
   assign aluif.ALUOP = drif.exe_ALUOp;
-  assign aluif.porta = drif.exe_rdat1;
-  assign aluif.portb = drif.exe_shift ? {27'd0, drif.exe_shamt} : (drif.exe_ALUSrc ? drif.exe_ex_out : drif.exe_rdat2);
+  assign aluif.porta = fuif.rdat1_out;
+  assign aluif.portb = drif.exe_shift ? {27'd0, drif.exe_shamt} : (drif.exe_ALUSrc ? drif.exe_ex_out : fuif.rdat2_out);
 
   // ---------- connect hazard unit ---------- //
   assign hzif.MemWr = erif.mem_MemWr;
@@ -457,13 +580,33 @@ module datapath (
   assign hzif.rs = frif.decode_imemload[25:21];
   assign hzif.rt = frif.decode_imemload[20:16];
 
+   //-----------forward unit---------------//
+   assign fuif.ex_rsel1 = drif.exe_rs;
+   assign fuif.ex_rsel2 = drif.exe_rt;
+   assign fuif.ex_rdat1 = drif.exe_rdat1;
+   assign fuif.ex_rdat2 = drif.exe_rdat2;
+   assign fuif.mem_wsel = erif.mem_wsel;
+   assign fuif.mem_dat  = erif.mem_MemRd ? dpif.dmemload : erif.mem_alu_out;
+   assign fuif.wb_wsel  = mrif.wrb_wsel;
+   //assign fuif.wb_dat   = mfif.wdat;
+   assign fuif.memToReg = mrif.wrb_MemtoReg;
+   assign fuif.mem_wen  = erif.mem_RegWr;
+   assign fuif.wb_wen   = mrif.wrb_RegWr;
+
+
   // ---------- attach datapath ---------- //
   assign dpif.halt      = mrif.wrb_halt;
-  assign dpif.imemREN   = 1'b1;
+  assign dpif.imemREN   = !(erif.mem_MemRd || erif.mem_MemWr);
   assign dpif.imemaddr  = pc;
   assign dpif.dmemREN   = erif.mem_MemRd;
   assign dpif.dmemWEN   = erif.mem_MemWr;
   assign dpif.dmemstore = erif.mem_rdat2;
   assign dpif.dmemaddr  = erif.mem_alu_out;
+
+  // ---------- attach caches to datapath ---------- //
+
+
+
+  // ---------- attach caches to memory controller ---------- //
 
 endmodule

@@ -6,7 +6,10 @@
 
 interface mem_reg_if;
   // import types
+
   import cpu_types_pkg::*;
+
+   opcode_t op_in, op_out;
 
   // data signals
   logic [31:0] mem_pc_4, mem_dmemload, mem_ex_out, mem_alu_out, mem_wsel;
@@ -19,20 +22,20 @@ interface mem_reg_if;
 
   // memory register ports
   modport memu (
-    input  flush, EN,
+    input  op_in,flush, EN,
     input  mem_pc_4, mem_dmemload, mem_ex_out, mem_alu_out, mem_wsel,
     input  mem_halt, mem_RegWr, mem_MemtoReg,
-    output wrb_halt, wrb_RegWr, wrb_MemtoReg,
+    output op_out,wrb_halt, wrb_RegWr, wrb_MemtoReg,
     output wrb_pc_4, wrb_dmemload, wrb_ex_out, wrb_alu_out, wrb_wsel
   );
 
 
   // memory register ports
   modport tb (
-    output flush, EN,
+    output op_out,flush, EN,
     output mem_pc_4, mem_dmemload, mem_ex_out, mem_alu_out, mem_wsel,
     output mem_halt, mem_RegWr, mem_MemtoReg,
-    input  wrb_halt, wrb_RegWr, wrb_MemtoReg,
+    input  op_in,wrb_halt, wrb_RegWr, wrb_MemtoReg,
     input  wrb_pc_4, wrb_dmemload, wrb_ex_out, wrb_alu_out, wrb_wsel
   );
 

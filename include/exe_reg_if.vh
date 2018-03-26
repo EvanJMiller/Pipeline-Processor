@@ -7,7 +7,8 @@
 interface exe_reg_if;
   // import types
   import cpu_types_pkg::*;
-
+  opcode_t op_in, op_out;
+   
   // data signals
   logic [27:0] exe_jump_addr, mem_jump_addr;
   logic [31:0] exe_pc_4, exe_branch_addr, exe_rdat1, exe_ex_out, exe_alu_out, exe_rdat2, exe_wsel;
@@ -26,11 +27,11 @@ interface exe_reg_if;
 
   // execute register ports
   modport exeu (
-    input  flush, EN,
+    input  op_in,flush, EN,
     input  exe_jump_addr, exe_pc_4, exe_branch_addr, exe_rdat1, exe_ex_out, exe_alu_out, exe_rdat2, exe_wsel,
     input  exe_MemWr, exe_MemRd, exe_branch, exe_zero, exe_PCSrc,
     input  exe_halt, exe_RegWr, exe_MemtoReg,
-    output mem_halt, mem_RegWr, mem_MemtoReg,
+    output op_out,mem_halt, mem_RegWr, mem_MemtoReg,
     output mem_MemWr, mem_MemRd, mem_branch, mem_zero, mem_PCSrc,
     output mem_jump_addr, mem_pc_4, mem_branch_addr, mem_rdat1, mem_ex_out, mem_alu_out, mem_rdat2, mem_wsel
   );
@@ -38,11 +39,12 @@ interface exe_reg_if;
 
   // execute register ports
   modport tb (
+    
     output flush, EN,
     output exe_jump_addr, exe_pc_4, exe_branch_addr, exe_rdat1, exe_ex_out, exe_alu_out, exe_rdat2, exe_wsel,
     output exe_MemWr, exe_MemRd, exe_branch, exe_zero, exe_PCSrc,
-    output exe_halt, exe_RegWr, exe_MemtoReg,
-    input  mem_halt, mem_RegWr, mem_MemtoReg,
+    output op_in, exe_halt, exe_RegWr, exe_MemtoReg,
+    input  op_out, mem_halt, mem_RegWr, mem_MemtoReg,
     input  mem_MemWr, mem_MemRd, mem_branch, mem_zero, mem_PCSrc,
     input  mem_jump_addr, mem_pc_4, mem_branch_addr, mem_rdat1, mem_ex_out, mem_alu_out, mem_rdat2, mem_wsel
   );

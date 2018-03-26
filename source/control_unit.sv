@@ -115,6 +115,7 @@ always_comb begin
       ctrluif.ALUOp    = ALU_SUB;
       ctrluif.PCSrc    = 2'b00;
       ctrluif.branch   = 1'b1;
+      //ctrluif.ExtOp    = EX_SIGNED;
     end
 
     // for BNE: branch = 0 chooses PCSrc as 10 (branch) only if zero flag is NOT set
@@ -122,6 +123,7 @@ always_comb begin
     BNE : begin
       ctrluif.ALUOp    = ALU_SUB;
       ctrluif.PCSrc    = 2'b10;
+     // ctrluif.ExtOp    = EX_SIGNED;
     end
 
     ADDI : begin

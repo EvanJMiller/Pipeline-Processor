@@ -3,31 +3,31 @@
 #Author Adam Hendrickson ahendri@purdue.edu
 
 org 0x0000
-  ori   $fp, $zero, 0xFFFC
-  ori   $sp, $zero, 0xFFFC
-  ori   $a0, $zero, data
-  lw    $s0, size($zero)
-  srl   $a1, $s0, 1
-  or    $s1, $zero, $a0
-  or    $s2, $zero, $a1
-  jal   insertion_sort
-  srl   $t0, $s0, 1
-  subu  $a1, $s0, $t0
-  sll   $t0, $t0, 2
-  ori   $a0, $zero, data
-  addu  $a0, $a0, $t0
-  or    $s3, $zero, $a0
-  or    $s4, $zero, $a1
-  jal   insertion_sort
-  or    $a0, $zero, $s1
-  or    $a1, $zero, $s2
-  or    $a2, $zero, $s3
-  or    $a3, $zero, $s4
-  ori   $t0, $zero, sorted
-  push  $t0
-  jal   merge
-  addiu $sp, $sp, 4
-  halt
+  ori   $fp, $zero, 0xFFFC  # 00
+  ori   $sp, $zero, 0xFFFC  # 04
+  ori   $a0, $zero, data    # 08
+  lw    $s0, size($zero)    # 0C
+  srl   $a1, $s0, 1         # 10
+  or    $s1, $zero, $a0     # 14
+  or    $s2, $zero, $a1     # 18
+  jal   insertion_sort      # 1c
+  srl   $t0, $s0, 1         # 20
+  subu  $a1, $s0, $t0       # 24
+  sll   $t0, $t0, 2         # 28
+  ori   $a0, $zero, data    # 2C
+  addu  $a0, $a0, $t0       # 30
+  or    $s3, $zero, $a0     # 34
+  or    $s4, $zero, $a1     # 38
+  jal   insertion_sort      # 3C
+  or    $a0, $zero, $s1     # 40
+  or    $a1, $zero, $s2     # 44
+  or    $a2, $zero, $s3     # 48
+  or    $a3, $zero, $s4     # 4C
+  ori   $t0, $zero, sorted  # 50
+  push  $t0                 # 54, 58
+  jal   merge               # 5C
+  addiu $sp, $sp, 4         # 60
+  halt                      # 64
 
 
 
